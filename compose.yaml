@@ -1,0 +1,17 @@
+services:
+  thread-bot:
+    build: .
+    restart: unless-stopped
+    environment:
+      MATRIX_HOMESERVER: ${MATRIX_HOMESERVER:?set MATRIX_HOMESERVER}
+      MATRIX_ACCESS_TOKEN: ${MATRIX_ACCESS_TOKEN:?set MATRIX_ACCESS_TOKEN}
+      ALLOWED_INVITERS: ${ALLOWED_INVITERS:?set ALLOWED_INVITERS}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
