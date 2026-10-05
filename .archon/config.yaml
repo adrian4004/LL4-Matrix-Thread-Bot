@@ -1,0 +1,12 @@
+# Archon config for this repo. Same pins as AdrianI (Ludwig's decisions):
+# unset nodes run on Sonnet; tiers large -> Opus, medium -> Sonnet, small -> Haiku.
+assistant: claude
+
+assistants:
+  claude:
+    model: sonnet
+
+tiers:
+  large:  { provider: claude, model: opus }
+  medium: { provider: claude, model: sonnet }
+  small:  { provider: claude, model: haiku }

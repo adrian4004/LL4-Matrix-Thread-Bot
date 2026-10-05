@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Bash|Grep|Edit|Write|Glob|NotebookEdit|MultiEdit",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}\"/.claude/hooks/block-env.py"}
+        ]
+      }
+    ]
+  }
+}
