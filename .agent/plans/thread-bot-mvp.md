@@ -53,6 +53,8 @@ For every event in a joined room's timeline:
 
 No persistent state, no volume. On start, do one `/sync` and **discard its timeline** (keep only `next_batch` and process its invites). Only events from later syncs are acted on. Messages written while the bot was down get no thread — Ludwig's decision.
 
+**Joining a room with history** (Ludwig, 2026-10-08, found in the first live test): the same answer — messages that were in the room before the bot joined get no thread; only messages sent after the bot's own join are acted on. The sync right after a join delivers the room's recent backlog together with the bot's own `m.room.member` join event (and possibly new messages after it). So in a joined room's timeline, every event up to and including the bot's own join event is discarded; events after it are handled normally. This needs no state: the sync filter also requests `m.room.member` timeline events, and the cut is a pure function of the timeline batch. A member event for the bot that is a profile change (previous membership already `join`) is not a join and cuts nothing.
+
 ### Login
 
 `MATRIX_ACCESS_TOKEN` (no password). On start, `GET /account/whoami` to verify the token and learn the own user id; fail fast with a clear error if it does not work.
@@ -70,7 +72,7 @@ Ship a `.env.example` with the names and empty/placeholder values only.
 
 ## Robustness
 
-- Long-poll `/sync?timeout=30000` with a filter that only requests room timeline events of the two types above plus invite state (no presence, no account data, `lazy_load_members`).
+- Long-poll `/sync?timeout=30000` with a filter that only requests room timeline events of the two types above (plus `m.room.member`, to see the bot's own join) and invite state (no presence, no account data, `lazy_load_members`).
 - HTTP 429 / `M_LIMIT_EXCEEDED` → wait `retry_after_ms` (Retry-After header or body), then retry.
 - Network errors / 5xx in the sync loop → exponential backoff capped at ~60 s, never crash-loop on a transient outage.
 - 401 `M_UNKNOWN_TOKEN` → log clearly and exit non-zero (Coolify shows it; retrying cannot fix it).

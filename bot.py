@@ -1,7 +1,8 @@
 """LL4 Matrix Thread Bot: opens a thread on every new root message in its rooms.
 
-Rule-based, no LLM. The rules live in the pure functions `thread_reply` and
-`should_join`; everything below them is the Matrix Client-Server API plumbing.
+Rule-based, no LLM. The rules live in the pure functions `thread_reply`,
+`should_join` and `after_own_join`; everything below them is the Matrix
+Client-Server API plumbing.
 Behaviour spec: .agent/plans/thread-bot-mvp.md
 """
 
@@ -31,7 +32,7 @@ SYNC_FILTER = json.dumps({
     "presence": {"types": []},
     "account_data": {"types": []},
     "room": {
-        "timeline": {"types": list(ROOM_EVENT_TYPES)},
+        "timeline": {"types": [*ROOM_EVENT_TYPES, "m.room.member"]},
         "state": {"lazy_load_members": True},
         "ephemeral": {"types": []},
         "account_data": {"types": []},
@@ -101,6 +102,25 @@ def inviter(invite_state: list[dict], own_user_id: str) -> str | None:
 
 def should_join(invite_state: list[dict], own_user_id: str, allowed: frozenset[str]) -> bool:
     return inviter(invite_state, own_user_id) in allowed
+
+
+def is_own_join(event: dict, own_user_id: str) -> bool:
+    """True for the bot's own join; a profile change is also a `join` member event."""
+    previous = ((event.get("unsigned") or {}).get("prev_content") or {}).get("membership")
+    return (
+        event.get("type") == "m.room.member"
+        and event.get("state_key") == own_user_id
+        and (event.get("content") or {}).get("membership") == "join"
+        and previous != "join"
+    )
+
+
+def after_own_join(timeline: list[dict], own_user_id: str) -> list[dict]:
+    """The events of a timeline batch sent after the bot joined; history before it is ignored."""
+    for index in range(len(timeline) - 1, -1, -1):
+        if is_own_join(timeline[index], own_user_id):
+            return timeline[index + 1:]
+    return timeline
 
 
 def txn_id(root_event_id: str) -> str:
@@ -223,7 +243,7 @@ async def handle_invites(matrix: Matrix, sync: dict, own: str, allowed: frozense
 
 async def handle_timeline(matrix: Matrix, sync: dict, own: str) -> None:
     for room_id, room in sync.get("rooms", {}).get("join", {}).items():
-        for event in room.get("timeline", {}).get("events", []):
+        for event in after_own_join(room.get("timeline", {}).get("events", []), own):
             reply = thread_reply(event, own)
             if reply is None:
                 continue
