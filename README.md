@@ -68,7 +68,8 @@ The bot logs room ids, event ids and inviter ids — never message contents or t
 
    | Log | Cause |
    |---|---|
-   | `cannot verify the access token at startup (ConnectError)`, repeating | `MATRIX_HOMESERVER` not reachable from the container (step 6), or still the `set …` placeholder |
+   | `cannot verify the access token at startup (ConnectError)`, repeating | `MATRIX_HOMESERVER` not reachable from the container (step 6) |
+   | `cannot verify the access token at startup (UnsupportedProtocol)`, repeating | `MATRIX_HOMESERVER` is still the `set …` placeholder (step 5) or lacks `http://`/`https://` |
    | `access token rejected by the homeserver (HTTP 401)`, bot exits | Invalid `MATRIX_ACCESS_TOKEN` |
 
 8. **Invite the bot** from an account in `ALLOWED_INVITERS`, typing its full Matrix ID (`@threadbot:example.org`) — a client's autocomplete may pick a different user with a shorter ID. Expect `joining <room> (invited by <user>)` in the log; an invite from anyone else logs `rejecting invite …`. Write a message: it gets a `🧵` thread. Messages from before the bot joined stay untouched.
