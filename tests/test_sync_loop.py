@@ -22,6 +22,14 @@ def invite(inviter: str) -> dict:
     ]}}
 
 
+def own_join(prev_membership: str | None = None) -> dict:
+    event = {"type": "m.room.member", "sender": BOT, "state_key": BOT, "event_id": "$join",
+             "content": {"membership": "join"}}
+    if prev_membership:
+        event["unsigned"] = {"prev_content": {"membership": prev_membership}}
+    return event
+
+
 SYNCS = [
     # Startup sync: history and a pending invite.
     {"next_batch": "s1", "rooms": {
@@ -32,7 +40,13 @@ SYNCS = [
     httpx.Response(502),
     httpx.Response(503),
     {"next_batch": "s2", "rooms": {
-        "join": {"!old:example.org": {"timeline": {"events": [root("$new")]}}},
+        "join": {
+            "!old:example.org": {"timeline": {"events": [root("$new")]}},
+            # Just joined: the backlog arrives together with the bot's own join.
+            "!friend:example.org": {"timeline": {"events": [
+                root("$backlog"), own_join("invite"), root("$after-join"),
+            ]}},
+        },
         "invite": {"!stranger:example.org": invite("@mallory:example.org")},
     }},
     httpx.Response(401, json={"errcode": "M_UNKNOWN_TOKEN"}),
@@ -70,13 +84,17 @@ def actions(requests: list[httpx.Request]) -> list[tuple[str, str]]:
             for r in requests if not r.url.path.endswith(("/sync", "/whoami"))]
 
 
+def threaded(requests: list[httpx.Request]) -> list[tuple[str, str]]:
+    return [(r.url.path.split("/")[5], json.loads(r.content)["m.relates_to"]["event_id"])
+            for r in requests if r.method == "PUT"]
+
+
 def test_history_is_ignored_and_only_new_roots_are_threaded(homeserver):
     requests, _, _ = homeserver
+    assert threaded(requests) == [("!old:example.org", "$new"), ("!friend:example.org", "$after-join")]
     sends = [r for r in requests if r.method == "PUT"]
-    assert len(sends) == 1
     assert sends[0].url.path.startswith("/_matrix/client/v3/rooms/!old:example.org/send/m.room.message/thread-")
     assert sends[0].url.path.endswith(bot.txn_id("$new"))
-    assert json.loads(sends[0].content)["m.relates_to"]["event_id"] == "$new"
     assert sends[0].headers["Authorization"] == "Bearer syt_placeholder"
 
 
@@ -92,3 +110,8 @@ def test_rate_limit_and_server_errors_are_retried(homeserver):
     since = [r.url.params.get("since") for r in requests if r.url.path.endswith("/sync")]
     assert since == [None, "s1", "s1", "s1", "s1", "s2"]
     assert heartbeat.exists()
+
+
+def test_sync_filter_delivers_member_events_to_see_the_own_join():
+    timeline_types = json.loads(bot.SYNC_FILTER)["room"]["timeline"]["types"]
+    assert "m.room.member" in timeline_types

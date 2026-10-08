@@ -17,7 +17,7 @@ The thread reply is an `m.notice` with `rel_type: m.thread`, `is_falling_back` a
 
 **Invites:** the bot joins a room only when invited by a user listed in `ALLOWED_INVITERS`; every other invite is rejected.
 
-**Restarts:** the bot keeps no state. Messages written while it was offline do not get a thread.
+**History:** the bot keeps no state and only acts on messages sent while it is running and in the room. Messages written while it was offline, or before it joined a room, do not get a thread.
 
 ### Encrypted rooms
 
@@ -41,7 +41,13 @@ The bot logs room ids, event ids and inviter ids — never message contents or t
 
 ## Deploy on Coolify
 
-1. **Create a bot user** on your homeserver, e.g. `@threadbot:example.org` (registration, or your server's admin tooling).
+1. **Create a bot user** on your homeserver, e.g. `@threadbot:example.org` (registration, or your server's admin tooling). On Synapse, inside the Synapse container:
+
+   ```sh
+   register_new_matrix_user -c /data/homeserver.yaml -u threadbot --no-admin http://localhost:8008
+   ```
+
+   It prompts for a password. A non-admin account is enough; the password is only needed once, for step 2.
 2. **Get an access token** with a one-time password login:
 
    ```sh
@@ -50,12 +56,29 @@ The bot logs room ids, event ids and inviter ids — never message contents or t
      -d '{"type":"m.login.password","identifier":{"type":"m.id.user","user":"threadbot"},"password":"…","initial_device_display_name":"thread-bot"}'
    ```
 
-   Copy `access_token` from the response. Do not log this device out — that invalidates the token.
-3. **Create a resource** in Coolify: *Docker Compose* from this GitHub repository, compose file `compose.yaml`.
-4. **Set the environment variables** `MATRIX_HOMESERVER`, `MATRIX_ACCESS_TOKEN` and `ALLOWED_INVITERS` in the resource's environment settings (Coolify lists them from the compose file).
-5. **Deploy.** The logs should show `logged in as @threadbot:example.org`. Invite the bot to a room from an allowed account.
+   Copy `access_token` from the response and keep it only in Coolify (step 5). Do not log this device out — that invalidates the token.
+3. **Create the resource:** *New Resource → Public Repository* (the repository is public, no GitHub App needed), URL of this repository, branch `main`, build pack **Docker Compose**, compose file location `/compose.yaml`.
+4. **Ignore the domain.** Coolify assigns an automatic `sslip.io` domain. The bot exposes no port and needs no domain; leave it unused or remove it.
+5. **Set the environment variables** `MATRIX_HOMESERVER`, `MATRIX_ACCESS_TOKEN` and `ALLOWED_INVITERS` — **overwrite all three.** Coolify pre-fills each with the error message from `compose.yaml` (literally `set MATRIX_HOMESERVER`, `set MATRIX_ACCESS_TOKEN`, `set ALLOWED_INVITERS`), so a forgotten variable does not stop the deploy: the bot starts with that text as its value. The "preview" copies Coolify creates only matter for preview deployments.
+6. **`MATRIX_HOMESERVER` is seen from inside the container.** If the homeserver has a public URL, use it. If it runs on the same host and is only reachable there:
+   - `localhost` is the bot's own container, not the host.
+   - `host.docker.internal` does not resolve in Coolify Docker Compose deployments.
+   - Use the host's Docker bridge gateway (`docker network inspect bridge` → `Gateway`, often `172.17.0.1`) plus the homeserver's published port, e.g. `http://172.17.0.1:8008`.
+7. **Deploy and read the logs.** Success: `logged in as @threadbot:example.org`.
 
-The container exposes no ports (it only connects outward), runs as a non-root user on a read-only filesystem with all capabilities dropped, and reports unhealthy when it has not completed a sync for two minutes. An invalid token makes it exit with an error instead of retrying.
+   | Log | Cause |
+   |---|---|
+   | `cannot verify the access token at startup (ConnectError)`, repeating | `MATRIX_HOMESERVER` not reachable from the container (step 6) |
+   | `cannot verify the access token at startup (UnsupportedProtocol)`, repeating | `MATRIX_HOMESERVER` is still the `set …` placeholder (step 5) or lacks `http://`/`https://` |
+   | `access token rejected by the homeserver (HTTP 401)`, bot exits | Invalid `MATRIX_ACCESS_TOKEN` |
+
+8. **Invite the bot** from an account in `ALLOWED_INVITERS`, typing its full Matrix ID (`@threadbot:example.org`) — a client's autocomplete may pick a different user with a shorter ID. Expect `joining <room> (invited by <user>)` in the log; an invite from anyone else logs `rejecting invite …`. Write a message: it gets a `🧵` thread. Messages from before the bot joined stay untouched.
+
+The container exposes no ports (it only connects outward), runs as a non-root user on a read-only filesystem with all capabilities dropped, and reports unhealthy when it has not completed a sync for two minutes.
+
+### Other homeservers
+
+The bot can only be invited into rooms its homeserver federates with; a homeserver that does not federate (e.g. a local test server) cannot reach rooms elsewhere. For a second homeserver, create a bot account *on that server* and deploy a second Coolify resource from this repository with that server's three variables — one bot instance per homeserver.
 
 ## Run locally
 
@@ -63,6 +86,8 @@ The container exposes no ports (it only connects outward), runs as a non-root us
 cp .env.example .env   # fill in the values
 docker compose up --build
 ```
+
+If the homeserver runs on the same machine, step 6 applies: use the Docker bridge gateway, or attach the container to the homeserver's Docker network with a compose override file kept out of git.
 
 Tests: `uv run pytest`
 

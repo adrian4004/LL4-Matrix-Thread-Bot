@@ -1,6 +1,6 @@
 import pytest
 
-from bot import ConfigError, load_config, should_join, thread_reply, txn_id
+from bot import ConfigError, after_own_join, load_config, should_join, thread_reply, txn_id
 
 BOT = "@threadbot:example.org"
 ALICE = "@alice:example.org"
@@ -170,6 +170,44 @@ def test_invite_is_read_from_own_member_event_only():
     state.insert(0, {"type": "m.room.member", "sender": ALICE, "state_key": "@other:example.org",
                      "content": {"membership": "invite"}})
     assert should_join(state, BOT, ALLOWED) is False
+
+
+# --- history on join -------------------------------------------------------
+
+def member(state_key: str, membership: str, prev: str | None = None) -> dict:
+    event = {"type": "m.room.member", "sender": state_key, "state_key": state_key,
+             "event_id": f"${state_key}-{membership}", "content": {"membership": membership}}
+    if prev:
+        event["unsigned"] = {"prev_content": {"membership": prev}}
+    return event
+
+
+def root(event_id: str) -> dict:
+    return {**text("hi"), "event_id": event_id}
+
+
+def test_backlog_before_own_join_is_dropped_and_later_messages_kept():
+    timeline = [root("$old1"), root("$old2"), member(BOT, "join", prev="invite"), root("$new")]
+    assert after_own_join(timeline, BOT) == [root("$new")]
+
+
+def test_own_join_without_prev_content_still_cuts_the_backlog():
+    assert after_own_join([root("$old"), member(BOT, "join")], BOT) == []
+
+
+def test_timeline_without_own_join_is_kept_whole():
+    timeline = [root("$a"), member(ALICE, "join", prev="invite"), root("$b")]
+    assert after_own_join(timeline, BOT) == timeline
+
+
+def test_own_profile_change_is_not_a_join():
+    timeline = [root("$a"), member(BOT, "join", prev="join"), root("$b")]
+    assert after_own_join(timeline, BOT) == timeline
+
+
+def test_own_leave_or_invite_does_not_cut():
+    timeline = [root("$a"), member(BOT, "invite"), member(BOT, "leave"), root("$b")]
+    assert after_own_join(timeline, BOT) == timeline
 
 
 # --- configuration ----------------------------------------------------------
