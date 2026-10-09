@@ -10,8 +10,7 @@ For every new event in a room it has joined:
 - **Messages already in a thread, edits, reactions** (anything with a `rel_type`) → ignored.
 - **Replies** to another message → ignored; a reply belongs to the conversation it answers.
 - **Notices** (`m.notice`, what bots send) → ignored.
-- **Everything else** — text, emotes, images, files, video, audio — is a root message: the bot replies in a new thread with `🧵`.
-- A text message that is **bold in its entirety** (`**Title**`) gets its title echoed: `🧵 **Title**`. A message that merely contains a bold word is not a title.
+- **Everything else** — text, emotes, images, files, video, audio — is a root message: the bot replies in a new thread with `💬 Hier geht's weiter`.
 
 The thread reply is an `m.notice` with `rel_type: m.thread`, `is_falling_back` and an `m.in_reply_to` fallback, so older clients show it as a reply.
 
@@ -23,8 +22,8 @@ The thread reply is an `m.notice` with `rel_type: m.thread`, `is_falling_back` a
 
 The bot has no encryption keys and needs none: Matrix keeps a message's relation (thread, reply, edit) in the unencrypted part of an encrypted event, so all ignore-rules above still work. Limits:
 
-- The bot cannot read encrypted messages, so it always answers with a plain `🧵` (no title) and cannot tell an encrypted notice from other messages.
-- Its own `🧵` is sent unencrypted; clients may show a small "not encrypted" marker next to it.
+- The bot cannot read encrypted messages, so it cannot tell an encrypted notice from other messages.
+- Its own `💬 Hier geht's weiter` is sent unencrypted; clients may show a small "not encrypted" marker next to it.
 
 ## Configuration
 
@@ -72,7 +71,7 @@ The bot logs room ids, event ids and inviter ids — never message contents or t
    | `cannot verify the access token at startup (UnsupportedProtocol)`, repeating | `MATRIX_HOMESERVER` is still the `set …` placeholder (step 5) or lacks `http://`/`https://` |
    | `access token rejected by the homeserver (HTTP 401)`, bot exits | Invalid `MATRIX_ACCESS_TOKEN` |
 
-8. **Invite the bot** from an account in `ALLOWED_INVITERS`, typing its full Matrix ID (`@threadbot:example.org`) — a client's autocomplete may pick a different user with a shorter ID. Expect `joining <room> (invited by <user>)` in the log; an invite from anyone else logs `rejecting invite …`. Write a message: it gets a `🧵` thread. Messages from before the bot joined stay untouched.
+8. **Invite the bot** from an account in `ALLOWED_INVITERS`, typing its full Matrix ID (`@threadbot:example.org`) — a client's autocomplete may pick a different user with a shorter ID. Expect `joining <room> (invited by <user>)` in the log; an invite from anyone else logs `rejecting invite …`. Write a message: it gets a `💬 Hier geht's weiter` thread. Messages from before the bot joined stay untouched.
 
 The container exposes no ports (it only connects outward), runs as a non-root user on a read-only filesystem with all capabilities dropped, and reports unhealthy when it has not completed a sync for two minutes.
 

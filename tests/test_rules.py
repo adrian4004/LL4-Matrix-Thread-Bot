@@ -26,9 +26,9 @@ def encrypted(relation: dict | None = None) -> dict:
     return message(content, type_="m.room.encrypted")
 
 
-PLAIN_THREAD = {
+THREAD_REPLY = {
     "msgtype": "m.notice",
-    "body": "🧵",
+    "body": "💬 Hier geht's weiter",
     "m.relates_to": {
         "rel_type": "m.thread",
         "event_id": ROOT,
@@ -36,10 +36,6 @@ PLAIN_THREAD = {
         "m.in_reply_to": {"event_id": ROOT},
     },
 }
-
-
-def titled_thread(body: str, formatted: str) -> dict:
-    return {**PLAIN_THREAD, "body": body, "format": "org.matrix.custom.html", "formatted_body": formatted}
 
 
 # --- ignored events ---------------------------------------------------------
@@ -86,61 +82,43 @@ def test_ignored(event):
     assert thread_reply(event, BOT) is None
 
 
-# --- root messages get a plain thread ---------------------------------------
+# --- every root message gets the same thread reply ---------------------------
 
 @pytest.mark.parametrize(
     "event",
     [
         pytest.param(text("hello"), id="plain text"),
-        pytest.param(message({"msgtype": "m.emote", "body": "**waves**"}), id="emote (bold not a title)"),
+        pytest.param(message({"msgtype": "m.emote", "body": "**waves**"}), id="bold emote"),
         pytest.param(message({"msgtype": "m.image", "body": "cat.png", "url": "mxc://example.org/a"}), id="image"),
         pytest.param(message({"msgtype": "m.file", "body": "a.pdf", "url": "mxc://example.org/b"}), id="file"),
         pytest.param(message({"msgtype": "m.video", "body": "v.mp4", "url": "mxc://example.org/c"}), id="video"),
         pytest.param(message({"msgtype": "m.audio", "body": "a.ogg", "url": "mxc://example.org/d"}), id="audio"),
         pytest.param(encrypted(), id="encrypted root"),
         pytest.param(text("this is **partly** bold"), id="partially bold body"),
-        pytest.param(text("**one** and **two**"), id="two bold parts in body"),
-        pytest.param(html("**one** rest", "<strong>one</strong> rest"), id="partially bold html"),
-        pytest.param(text("****"), id="empty bold"),
-        pytest.param(text("**line one\nline two**"), id="multi-line bold"),
     ],
 )
-def test_plain_thread(event):
-    assert thread_reply(event, BOT) == PLAIN_THREAD
+def test_root_message_gets_thread_reply(event):
+    assert thread_reply(event, BOT) == THREAD_REPLY
 
 
 def test_root_without_relation_object_is_threaded():
     event = text("hello", **{"m.relates_to": {}})
-    assert thread_reply(event, BOT) == PLAIN_THREAD
+    assert thread_reply(event, BOT) == THREAD_REPLY
 
 
-# --- bold titles ------------------------------------------------------------
+# --- a bold title is not echoed ----------------------------------------------
 
-def test_bold_plain_body_becomes_title():
-    assert thread_reply(text("**Titel**"), BOT) == titled_thread("🧵 **Titel**", "🧵 <strong>Titel</strong>")
-
-
-@pytest.mark.parametrize("tag", ["strong", "b"])
-def test_bold_formatted_body_becomes_title(tag):
-    event = html("Titel", f"<{tag}>Titel</{tag}>")
-    assert thread_reply(event, BOT) == titled_thread("🧵 **Titel**", "🧵 <strong>Titel</strong>")
-
-
-def test_title_is_html_escaped():
-    event = html("**Fish & <Chips>**", "<strong>Fish &amp; &lt;Chips&gt;</strong>")
-    expected = titled_thread("🧵 **Fish & <Chips>**", "🧵 <strong>Fish &amp; &lt;Chips&gt;</strong>")
-    assert thread_reply(event, BOT) == expected
-
-
-def test_title_from_plain_body_is_html_escaped():
-    expected = titled_thread("🧵 **a<b>c**", "🧵 <strong>a&lt;b&gt;c</strong>")
-    assert thread_reply(text("**a<b>c**"), BOT) == expected
-
-
-def test_encrypted_root_never_gets_title():
-    event = encrypted()
-    event["content"].update(msgtype="m.text", body="**Titel**")
-    assert thread_reply(event, BOT) == PLAIN_THREAD
+@pytest.mark.parametrize(
+    "event",
+    [
+        pytest.param(text("**Titel**"), id="bold markdown body"),
+        pytest.param(html("**Titel**", "<strong>Titel</strong>"), id="bold html"),
+    ],
+)
+def test_bold_title_gets_plain_reply(event):
+    reply = thread_reply(event, BOT)
+    assert reply == THREAD_REPLY
+    assert "format" not in reply and "formatted_body" not in reply
 
 
 # --- invites ----------------------------------------------------------------
