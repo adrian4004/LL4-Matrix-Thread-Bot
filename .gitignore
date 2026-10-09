@@ -6,3 +6,11 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .claude/settings.local.json
+
+# Local development tooling, not published
+.agent/
+.archon/
+.claude/
+.serena/
+CLAUDE.md
+compose.local.yaml
