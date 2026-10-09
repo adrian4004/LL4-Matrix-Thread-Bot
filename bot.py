@@ -8,11 +8,9 @@ Behaviour spec: .agent/plans/thread-bot-mvp.md
 
 import asyncio
 import hashlib
-import html
 import json
 import logging
 import os
-import re
 import signal
 import sys
 from dataclasses import dataclass
@@ -23,7 +21,7 @@ import httpx
 
 log = logging.getLogger("thread-bot")
 
-THREAD = "🧵"
+REPLY_TEXT = "💬 Hier geht's weiter"
 HEARTBEAT = Path("/tmp/heartbeat")
 SYNC_TIMEOUT_MS = 30_000
 MAX_BACKOFF_S = 60
@@ -39,23 +37,8 @@ SYNC_FILTER = json.dumps({
     },
 })
 
-BOLD_BODY = re.compile(r"\*\*((?:(?!\*\*).)+)\*\*")
-BOLD_HTML = re.compile(r"<(strong|b)>([^<]+)</\1>")
-
 
 # --- Rules (pure) -----------------------------------------------------------
-
-def title(content: dict) -> str | None:
-    """The title of an `m.text` message that is bold in its entirety, else None."""
-    if content.get("msgtype") != "m.text":
-        return None
-    if content.get("format") == "org.matrix.custom.html":
-        match = BOLD_HTML.fullmatch(str(content.get("formatted_body", "")).strip())
-        if match:
-            return html.unescape(match[2]).strip() or None
-    match = BOLD_BODY.fullmatch(str(content.get("body", "")).strip())
-    return (match[1].strip() or None) if match else None
-
 
 def thread_reply(event: dict, own_user_id: str) -> dict | None:
     """The content of the thread reply to send for `event`, or None to do nothing."""
@@ -71,9 +54,9 @@ def thread_reply(event: dict, own_user_id: str) -> dict | None:
         return None
 
     root = event["event_id"]
-    reply = {
+    return {
         "msgtype": "m.notice",
-        "body": THREAD,
+        "body": REPLY_TEXT,
         "m.relates_to": {
             "rel_type": "m.thread",
             "event_id": root,
@@ -81,11 +64,6 @@ def thread_reply(event: dict, own_user_id: str) -> dict | None:
             "m.in_reply_to": {"event_id": root},
         },
     }
-    if event["type"] == "m.room.message" and (name := title(content)):
-        reply["body"] = f"{THREAD} **{name}**"
-        reply["format"] = "org.matrix.custom.html"
-        reply["formatted_body"] = f"{THREAD} <strong>{html.escape(name)}</strong>"
-    return reply
 
 
 def inviter(invite_state: list[dict], own_user_id: str) -> str | None:
